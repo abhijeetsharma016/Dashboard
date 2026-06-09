@@ -185,4 +185,257 @@
             if (isSaving) {
                 el.innerHTML = '<i class="fas fa-sync fa-spin mr-2"></i> Syncing to cloud...';
                 el.classList.remove('opacity-0');
-            } else
+            } else {
+                el.innerHTML = '<i class="fas fa-check text-green-400 mr-2"></i> Synced';
+                setTimeout(() => el.classList.add('opacity-0'), 2000);
+            }
+        }
+
+        async function fetchCloudData() {
+            try {
+                const response = await fetch(BIN_URL, {
+                    headers: { 'X-Master-Key': API_KEY }
+                });
+                const data = await response.json();
+                if(data.record) {
+                    appData = data.record;
+                }
+                if (!appData.calendar) appData.calendar = {};
+                if (!appData.goals) appData.goals = { weekly: [], monthly: [], annual: [] };
+                if (!appData.habits) appData.habits = [];
+                if (!appData.habitChecks) appData.habitChecks = {};
+            } catch (error) {
+                console.error("Failed to load data:", error);
+                alert("Error loading data from cloud.");
+            }
+        }
+
+        async function save() {
+            showSyncStatus(true);
+            updateCharts(); 
+            
+            try {
+                await fetch(BIN_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': API_KEY
+                    },
+                    body: JSON.stringify(appData)
+                });
+                showSyncStatus(false);
+            } catch (error) {
+                console.error("Failed to save data:", error);
+                alert("Error saving to cloud. Changes might be lost.");
+            }
+        }
+
+        // === RENDERING ===
+        function renderHabits() {
+            const tbody = document.getElementById('habitTableBody');
+            tbody.innerHTML = '';
+
+            appData.habits.forEach((habit, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition-colors";
+                
+                tr.innerHTML += `<td class="text-left p-3"><input type="text" class="editable-input" value="${habit.name}" onchange="updateHabitName(${index}, this.value)"></td>`;
+
+                let count = 0;
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const key = `${habit.id}-${d}`;
+                    const isChecked = appData.habitChecks[key] || false;
+                    if(isChecked) count++;
+                    tr.innerHTML += `<td class="p-1"><input type="checkbox" class="checkbox-custom text-blue-500" ${isChecked ? 'checked' : ''} onchange="toggleHabit('${habit.id}', ${d}, this.checked)"></td>`;
+                }
+
+                const pct = Math.round((count/daysInMonth)*100);
+                tr.innerHTML += `<td class="p-3 text-blue-400 font-bold text-sm">${pct}%</td>`;
+                tr.innerHTML += `<td class="p-3"><i class="fas fa-times icon-btn-danger" onclick="deleteHabit(${index})"></i></td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderGoals() {
+            const container = document.getElementById('goalsContainer');
+            container.innerHTML = '';
+
+            Object.keys(appData.goals).forEach(sectionKey => {
+                const theme = goalThemes[sectionKey];
+                if (!theme) return;
+
+                const card = document.createElement('div');
+                card.className = `card ${theme.border} relative overflow-hidden`;
+                
+                card.innerHTML = `
+                    <div class="absolute top-0 left-0 w-full h-1 ${theme.bgAccent.replace('bg-', 'bg-gradient-to-r from-transparent to-')}"></div>
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-bold text-xl flex items-center ${theme.textAccent}">
+                            <span class="mr-2">${theme.icon}</span> ${theme.title}
+                        </h3> 
+                        <button onclick="addGoal('${sectionKey}')" class="${theme.textAccent} hover:bg-white/10 p-2 rounded-md transition text-sm">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div class="space-y-4" id="list-${sectionKey}"></div>
+                `;
+
+                const listContainer = card.querySelector(`#list-${sectionKey}`);
+                appData.goals[sectionKey].forEach((goal, idx) => {
+                    const div = document.createElement('div');
+                    div.className = "flex items-center space-x-3 group";
+                    div.innerHTML = `
+                        <input type="checkbox" class="checkbox-custom" style="color: ${theme.accentColor}" ${goal.checked ? 'checked' : ''} onchange="toggleGoal('${sectionKey}', ${idx}, this.checked)">
+                        <input type="text" class="editable-input ${goal.checked ? 'line-through text-secondary' : ''}" value="${goal.text}" onchange="updateGoalText('${sectionKey}', ${idx}, this.value)">
+                        <i class="fas fa-times icon-btn-danger opacity-0 group-hover:opacity-50 text-sm" onclick="deleteGoal('${sectionKey}', ${idx})"></i>
+                    `;
+                    listContainer.appendChild(div);
+                });
+                container.appendChild(card);
+            });
+        }
+
+        function renderCalendar() {
+            const container = document.getElementById('calendarContainer');
+            container.innerHTML = '';
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const div = document.createElement('div');
+                const savedText = appData.calendar[d] || '';
+                const hasEvent = savedText.trim().length > 0;
+                
+                const bgStyle = hasEvent ? 'bg-purple-500/20 border-purple-400' : 'bg-white/5 border-white/10';
+                const textStyle = hasEvent ? 'text-purple-300' : 'text-secondary';
+                
+                div.className = `border rounded-lg p-3 min-h-[100px] flex flex-col hover:border-purple-500/50 transition duration-300 group ${bgStyle}`;
+                
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="day-label text-xs font-bold group-hover:text-purple-400 transition-colors ${textStyle}">Day ${d}</span>
+                    </div>
+                    <textarea class="calendar-textarea no-scrollbar" placeholder="Add event..." oninput="handleCalendarInput(this, ${d})">${savedText}</textarea>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        // === INTERACTIONS ===
+        function toggleHabit(id, d, s) { s ? appData.habitChecks[`${id}-${d}`]=true : delete appData.habitChecks[`${id}-${d}`]; save(); renderHabits(); }
+        function updateHabitName(i, v) { appData.habits[i].name = v; save(); }
+        function addHabit() { appData.habits.push({id:'h'+Date.now(), name:'New Habit ⚡'}); save(); renderHabits(); }
+        function deleteHabit(i) { if(confirm('Delete habit?')) { const id=appData.habits[i].id; appData.habits.splice(i,1); Object.keys(appData.habitChecks).forEach(k=>{if(k.startsWith(id))delete appData.habitChecks[k]}); save(); renderHabits(); }}
+
+        function toggleGoal(s, i, st) { appData.goals[s][i].checked = st; save(); renderGoals(); }
+        function updateGoalText(s, i, v) { appData.goals[s][i].text = v; save(); }
+        function addGoal(s) { appData.goals[s].push({id:Date.now(), text:'New goal...', checked:false}); save(); renderGoals(); }
+        function deleteGoal(s, i) { appData.goals[s].splice(i,1); save(); renderGoals(); }
+        
+        function handleCalendarInput(element, day) {
+            const text = element.value;
+            appData.calendar[day] = text;
+            save();
+            
+            const box = element.parentElement;
+            const label = box.querySelector('.day-label');
+            
+            if (text.trim().length > 0) {
+                box.classList.remove('bg-white/5', 'border-white/10');
+                box.classList.add('bg-purple-500/20', 'border-purple-400');
+                label.classList.remove('text-secondary');
+                label.classList.add('text-purple-300');
+            } else {
+                box.classList.add('bg-white/5', 'border-white/10');
+                box.classList.remove('bg-purple-500/20', 'border-purple-400');
+                label.classList.add('text-secondary');
+                label.classList.remove('text-purple-300');
+            }
+        }
+
+        function downloadData() { const b=new Blob([JSON.stringify(appData)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download="habits-backup.json"; a.click(); }
+        
+        async function resetData() { 
+            if(confirm("Reset dashboard? All data will be permanently deleted globally.")) { 
+                appData = { habits: [], habitChecks: {}, goals: { weekly: [], monthly: [], annual: [] }, calendar: {} };
+                await save();
+                location.reload(); 
+            }
+        }
+
+        // === CHARTS ===
+        let donutChart, lineChart;
+        const chartColors = { primary: '#06b6d4', secondary: '#3b82f6', bg: '#202020', grid: '#333' };
+
+        function initCharts() {
+            Chart.defaults.color = '#a0a0a0';
+            Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+            const donutCtx = document.getElementById('donutChart').getContext('2d');
+            let donutGrad = donutCtx.createLinearGradient(0, 0, 0, 200);
+            donutGrad.addColorStop(0, chartColors.primary);
+            donutGrad.addColorStop(1, chartColors.secondary);
+
+            donutChart = new Chart(donutCtx, {
+                type: 'doughnut',
+                data: { labels: ['Done', 'Left'], datasets: [{ data: [0, 100], backgroundColor: [donutGrad, chartColors.bg], borderWidth: 0, cutout: '88%' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { animateScale: true } }
+            });
+
+            const lineCtx = document.getElementById('lineChart').getContext('2d');
+            let lineGrad = lineCtx.createLinearGradient(0, 0, 0, 300);
+            lineGrad.addColorStop(0, 'rgba(6, 182, 212, 0.4)'); 
+            lineGrad.addColorStop(1, 'rgba(6, 182, 212, 0.0)'); 
+
+            lineChart = new Chart(lineCtx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: daysInMonth}, (_, i) => i + 1),
+                    datasets: [{ 
+                        label: 'Consistency', data: [], 
+                        borderColor: chartColors.primary, 
+                        backgroundColor: lineGrad, 
+                        borderWidth: 3, tension: 0.4, fill: true, pointRadius: 0, pointHoverRadius: 6, pointBackgroundColor: chartColors.primary
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { y: { beginAtZero: true, max: 100, grid: { color: chartColors.grid, borderDash: [5, 5] } }, x: { display: false } }, 
+                    plugins: { legend: { display: false } }, interaction: { intersect: false, mode: 'index' }
+                }
+            });
+        }
+
+        function updateCharts() {
+            const dailyData = []; let totalChecks = 0;
+            for(let d=1; d<=daysInMonth; d++) {
+                let dayChecks = 0; appData.habits.forEach(h => { if(appData.habitChecks[`${h.id}-${d}`]) dayChecks++; });
+                dailyData.push(appData.habits.length > 0 ? Math.round((dayChecks / appData.habits.length) * 100) : 0);
+                totalChecks += dayChecks;
+            }
+            const totalPossible = appData.habits.length * daysInMonth;
+            const totalPct = totalPossible > 0 ? Math.round((totalChecks / totalPossible) * 100) : 0;
+
+            if(donutChart) { donutChart.data.datasets[0].data = [totalPct, 100 - totalPct]; donutChart.update(); }
+            document.getElementById('donutLabel').innerText = totalPct + "%";
+            if(lineChart) { lineChart.data.datasets[0].data = dailyData; lineChart.update(); }
+        }
+
+        // === INIT APP ===
+        async function bootApp() {
+            document.querySelector('.main-container').style.opacity = '0.3';
+            
+            await fetchCloudData(); 
+            
+            document.querySelector('.main-container').style.opacity = '1';
+            
+            initCharts();
+            renderHabits();
+            renderGoals();
+            renderCalendar();
+            updateCharts();
+        }
+
+        bootApp();
+
+    </script>
+</body>
+</html>
