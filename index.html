@@ -89,6 +89,11 @@
             </div>
             
             <div class="mt-4 flex space-x-3">
+                <input type="file" id="restoreUpload" accept=".json" class="hidden" onchange="handleRestore(event)">
+                
+                <button onclick="document.getElementById('restoreUpload').click()" class="btn-glass text-sm px-4 py-2 rounded-lg flex items-center text-gray-300">
+                    <i class="fas fa-file-upload mr-2"></i> Restore
+                </button>
                 <button onclick="downloadData()" class="btn-glass text-sm px-4 py-2 rounded-lg flex items-center text-gray-300">
                     <i class="fas fa-cloud-download-alt mr-2"></i> Backup
                 </button>
@@ -234,7 +239,6 @@
             updateCharts(); 
             
             try {
-                // set() overrides the whole document. We merge: true just to be safe
                 await docRef.set(appData, { merge: true });
                 showSyncStatus(false);
             } catch (error) {
@@ -343,7 +347,6 @@
         function addGoal(s) { appData.goals[s].push({id:Date.now(), text:'New goal...', checked:false}); save(); renderGoals(); }
         function deleteGoal(s, i) { appData.goals[s].splice(i,1); save(); renderGoals(); }
         
-        // Debounce timer for textarea typing so we don't spam Firebase writes
         let typingTimer;
         function handleCalendarInput(element, day) {
             const text = element.value;
@@ -365,11 +368,60 @@
             }
 
             clearTimeout(typingTimer);
-            typingTimer = setTimeout(() => { save(); }, 1000); // Save to Firebase 1s after user stops typing
+            typingTimer = setTimeout(() => { save(); }, 1000); 
         }
 
-        function downloadData() { const b=new Blob([JSON.stringify(appData)],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download="habits-firebase-backup.json"; a.click(); }
+        // === BACKUP & RESTORE ===
+        function downloadData() { 
+            const b = new Blob([JSON.stringify(appData)],{type:"application/json"}); 
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(b); 
+            a.download = "habits-firebase-backup.json"; 
+            a.click(); 
+        }
         
+        function handleRestore(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    // Basic validation to make sure it looks like our dashboard data
+                    if (importedData && importedData.habits !== undefined) {
+                        if(confirm("Are you sure you want to restore this backup? This will overwrite your current cloud data.")) {
+                            
+                            appData = importedData;
+                            
+                            // Safety checks for older backups
+                            if (!appData.calendar) appData.calendar = {};
+                            if (!appData.goals) appData.goals = { weekly: [], monthly: [], annual: [] };
+                            if (!appData.habits) appData.habits = [];
+                            if (!appData.habitChecks) appData.habitChecks = {};
+
+                            await save(); // Push the restored data directly to Firebase
+                            
+                            // Re-render everything
+                            renderHabits();
+                            renderGoals();
+                            renderCalendar();
+                            updateCharts();
+                        }
+                    } else {
+                        alert("Invalid backup file format. Are you sure this is your habits backup?");
+                    }
+                } catch (error) {
+                    console.error("Error parsing JSON:", error);
+                    alert("Error reading the file. Make sure it is a valid JSON backup.");
+                }
+                // Reset the input so you can select the same file again if needed
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
         async function resetData() { 
             if(confirm("Reset dashboard? All data will be permanently deleted from Firebase.")) { 
                 appData = { habits: [], habitChecks: {}, goals: { weekly: [], monthly: [], annual: [] }, calendar: {} };
