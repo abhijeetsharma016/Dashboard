@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Habits - Ultimate Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* --- THEME SETUP --- */
+        :root {
+            --bg-main: #191919;
+            --bg-card: #202020;
+            --border-color: #2a2a2a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #06b6d4;
+            --accent-green: #22c55e;
+            --accent-orange: #f97316;
+            --accent-purple: #a855f7;
+        }
+        body { background-color: var(--bg-main); color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+        /* --- CUSTOM UI COMPONENTS --- */
+        .notion-banner {
+            height: 30vh; min-height: 250px; max-height: 400px; width: 100%; position: relative; overflow: hidden;
+        }
+        .notion-banner img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; opacity: 0.9; }
+        .banner-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 150px; background: linear-gradient(to top, var(--bg-main), transparent); }
+
+        .main-container { max-width: 1200px; margin: 0 auto; padding: 0 2rem 4rem 2rem; position: relative; }
+        
+        .page-icon-header { font-size: 4.5rem; margin-top: -3.5rem; margin-bottom: 1rem; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+
+        .card { 
+            background-color: var(--bg-card); border-radius: 12px; padding: 24px; 
+            border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); border-color: #333; }
+
+        /* Checkboxes & Inputs */
+        .checkbox-custom { width: 18px; height: 18px; cursor: pointer; border-radius: 4px; border: 2px solid #444; appearance: none; position: relative; transition: 0.2s; }
+        .checkbox-custom:checked { background-color: currentColor; border-color: transparent; }
+        .checkbox-custom:checked::after { content: '✓'; position: absolute; color: black; font-size: 14px; top: -2px; left: 2px; font-weight: bold; }
+        
+        .editable-input { 
+            background: transparent; border-bottom: 1px solid transparent; color: inherit; width: 100%; 
+            padding: 4px 0; outline: none; transition: all 0.3s; font-size: 0.95rem;
+        }
+        .editable-input:hover { border-bottom-color: #444; }
+        .editable-input:focus { border-bottom-color: var(--accent-blue); }
+
+        .calendar-textarea {
+            background: transparent; border: none; resize: none; outline: none; width: 100%; height: 100%; 
+            color: var(--text-primary); font-size: 0.85rem; padding: 4px 0;
+        }
+
+        /* Buttons & Scrollbars */
+        .btn-glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); transition: 0.3s; }
+        .btn-glass:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+        
+        .icon-btn-danger { cursor: pointer; opacity: 0.3; transition: 0.2s; color: inherit; }
+        .icon-btn-danger:hover { opacity: 1; color: #ef4444; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+
+    <div class="notion-banner">
+        <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2070&auto=format&fit=crop" alt="Banner Image">
+        <div class="banner-fade"></div>
+    </div>
+
+    <div class="main-container">
+        <div class="flex justify-between items-start mb-10">
+            <div>
+                <div class="page-icon-header">🧗</div>
+                <h1 class="text-4xl font-extrabold mb-2 tracking-tight">My Habits & Goals</h1>
+                <p class="text-secondary text-lg">Track consistency and visualize progress globally.</p>
+            </div>
+            
+            <div class="mt-4 flex space-x-3">
+                <button onclick="downloadData()" class="btn-glass text-sm px-4 py-2 rounded-lg flex items-center text-gray-300">
+                    <i class="fas fa-cloud-download-alt mr-2"></i> Backup
+                </button>
+                <button onclick="resetData()" class="btn-glass text-sm px-4 py-2 rounded-lg flex items-center text-red-400 hover:text-red-300 border-red-900/30 hover:border-red-800/50 hover:bg-red-900/20">
+                    <i class="fas fa-trash-restore mr-2"></i> Reset
+                </button>
+            </div>
+        </div>
+
+        <div class="card mb-12 overflow-hidden">
+            <div class="flex justify-between items-center mb-6 px-2">
+                <h2 class="text-2xl font-bold flex items-center">
+                    <span class="bg-blue-500/20 text-blue-400 p-2 rounded-lg mr-3"><i class="fas fa-tasks"></i></span>
+                    January Tracker
+                </h2>
+                <button onclick="addHabit()" class="text-blue-400 hover:text-blue-300 transition text-sm font-semibold flex items-center bg-blue-500/10 px-3 py-2 rounded-md hover:bg-blue-500/20">
+                    <i class="fas fa-plus mr-2"></i> New Habit
+                </button>
+            </div>
+            
+            <div class="overflow-x-auto no-scrollbar pb-4">
+                <table class="w-full text-center border-collapse px-2">
+                    <thead>
+                        <tr class="text-secondary text-xs uppercase tracking-wider">
+                            <th class="text-left p-3 font-semibold min-w-[180px]">Habit Name</th>
+                            <script>for(let i=1; i<=31; i++) document.write(`<th class="p-1 font-medium">${i}</th>`);</script>
+                            <th class="p-3 text-blue-400 font-bold">%</th>
+                            <th class="p-1 w-8"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="habitTableBody" class="divide-y divide-gray-800/50">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div class="card flex flex-col items-center justify-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-600"></div>
+                <h3 class="absolute top-5 left-6 text-sm font-semibold text-secondary uppercase tracking-wider">Total Completion Rate</h3>
+                <div class="relative w-48 h-48 mt-8">
+                    <canvas id="donutChart"></canvas>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span id="donutLabel" class="text-4xl font-black text-cyan-400">0%</span>
+                        <span class="text-xs text-secondary uppercase mt-1">All Time</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card col-span-2 relative overflow-hidden">
+                 <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-cyan-500"></div>
+                <h3 class="absolute top-5 left-6 text-sm font-semibold text-secondary uppercase tracking-wider">Daily Consistency Trend</h3>
+                <div class="w-full h-72 mt-10">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12" id="goalsContainer">
+        </div>
+
+        <div class="card relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+            <div class="flex justify-between items-center mb-6 px-2">
+                <h2 class="text-2xl font-bold flex items-center">
+                    <span class="bg-purple-500/20 text-purple-400 p-2 rounded-lg mr-3"><i class="far fa-calendar-alt"></i></span>
+                    Monthly Calendar & Events
+                </h2>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3" id="calendarContainer">
+                </div>
+        </div>
+
+    </div> 
+    
+    <script>
+        // === CONFIG & THEMES ===
+        const daysInMonth = 31;
+        const goalThemes = {
+            weekly: { title: 'Weekly Focus', icon: '🔥', border: 'border-green-500/30', bgAccent: 'bg-green-500/10', textAccent: 'text-green-400', accentColor: '#22c55e' },
+            monthly: { title: 'Monthly Sprints', icon: '🚀', border: 'border-orange-500/30', bgAccent: 'bg-orange-500/10', textAccent: 'text-orange-400', accentColor: '#f97316' },
+            annual: { title: 'Annual Vision', icon: '🏆', border: 'border-purple-500/30', bgAccent: 'bg-purple-500/10', textAccent: 'text-purple-400', accentColor: '#a855f7' }
+        };
+
+        // === CLOUD DATA MANAGEMENT (JSONBin.io) ===
+        const BIN_ID = '6a2877ceda38895dfea2c3b0';
+        const API_KEY = '$2a$10$q3UWepL0Kjz4WN0EIRWfO0PKQq9LyN1vGoD7Awe4jpRyeivQAboem';
+        const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+        let appData = { habits: [], habitChecks: {}, goals: { weekly: [], monthly: [], annual: [] }, calendar: {} }; // Fallback
+
+        // Add a simple saving indicator to the UI
+        document.body.insertAdjacentHTML('beforeend', `<div id="syncStatus" class="fixed bottom-4 right-4 bg-gray-800 text-gray-300 px-4 py-2 rounded-lg text-sm shadow-lg opacity-0 transition-opacity duration-300 z-50 flex items-center"><i class="fas fa-sync fa-spin mr-2"></i> Syncing to cloud...</div>`);
+
+        function showSyncStatus(isSaving) {
+            const el = document.getElementById('syncStatus');
+            if (isSaving) {
+                el.innerHTML = '<i class="fas fa-sync fa-spin mr-2"></i> Syncing to cloud...';
+                el.classList.remove('opacity-0');
+            } else
